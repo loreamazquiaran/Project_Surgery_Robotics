@@ -128,10 +128,10 @@ void moveServos() {
     Serial.println("S1 premut → Obrint");
   }
 
-  servo_roll1.write(Gri_roll + delta);
-  servo_roll2.write(180 - Gri_roll);
-  servo_pitch.write(pitch);
-  servo_yaw.write(yaw);
+  servo_roll1.write(90 + Gri_roll + delta);
+  servo_roll2.write(90 - Gri_roll);
+  servo_pitch.write(90 + Gri_pitch);
+  servo_yaw.write(90 + (Gri_yaw - yaw0));
 }
 
 void setup() {
