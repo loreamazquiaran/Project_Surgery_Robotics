@@ -56,8 +56,8 @@ void updateOrientation() {
    // Obté els angles (roll, pitch, yaw) via GetRPW()
   float* rpw = imu.GetRPW();
   Gri_roll  = rpw[0];
-  Gri_pitch = rpw[2];
-  Gri_yaw   = -rpw[1];
+  Gri_pitch = rpw[1];
+  Gri_yaw   = rpw[2];
   s1Status = digitalRead(PIN_S1);
   s2Status = digitalRead(PIN_S2);
 }
