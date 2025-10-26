@@ -16,6 +16,7 @@ ROBOT_NAME = 'UR5e'
 ZERO_YAW_TOOL = 0
 ZERO_YAW_GRIPPER = 0
 READ_INTERVAL_S = 0.01
+TORQUE_THRESHOLD = 5.0
 
 Endowrist_rpy = None
 Gripper_rpy = None
@@ -111,9 +112,24 @@ def read_data_UDP():
             sock.close()
             print("Socket closed.")
             break
-
+        
+def update_torque_indicator(button, torque_value):
+    """Update the color of the torque indicator based on torque level"""
+    if torque_value < 2.0:
+        color = "green"
+        text = f"Torque: {torque_value:.2f} (Low)"
+    elif 2.0 <= torque_value <= 5.0:
+        color = "yellow"
+        text = f"Torque: {torque_value:.2f} (Medium)"
+    else:
+        color = "red"
+        text = f"Torque: {torque_value:.2f} (High)"
+    
+    # Update button safely in Tkinter thread
+    button.after(0, lambda: [button.config(bg=color, text=text)])
+    
 # Function to process the latest UDP data and move the robot
-def move_robot(robot, gripper, needle, text_label):
+def move_robot(robot, gripper, needle, text_label, torque_button):
     global ZERO_YAW_TOOL, ZERO_YAW_GRIPPER, Endowrist_rpy, Gripper_rpy, data_lock, robot_is_connected
     global e_roll, e_pitch, e_yaw, g_roll, g_pitch, g_yaw, s1, s2, s3, s4
     
@@ -191,7 +207,19 @@ def move_robot(robot, gripper, needle, text_label):
                 needle.setParent(gripper)
                 needle.setPose(TxyzRxyz_2_Pose([0, 0, 0, 0, 0, 0]))
                 status_message = "🔵 S2 premut: agulla agafada"
-                
+            
+            # --- NEW: Torque reading and update indicator ---
+            torque_total = (current_Gripper_rpy.get("Torque_roll1", 0)
+                            + current_Gripper_rpy.get("Torque_pitch", 0)
+                            + current_Gripper_rpy.get("Torque_yaw", 0))
+            servo_torques_msg = f"Torque total: {torque_total:.2f}"
+
+            # Update torque indicator color
+            update_torque_indicator(torque_button, torque_total)
+
+            if torque_total > TORQUE_THRESHOLD:
+                status_message += " ⚠️ High torque!"
+                    
         # Update the label with the latest values
         update_text_label(text_label, endowrist_orientation_msg, gripper_orientation_msg, status_message, servo_torques_msg)
 
@@ -242,6 +270,10 @@ def main():
                                         command=lambda value: set_zero_yaw_gripper(float(value)), length=200)
     gripper_yaw_slider.set(ZERO_YAW_GRIPPER)
     gripper_yaw_slider.pack()
+    
+    # Torque indicator button
+    torque_button = tk.Button(root, text="Torque", bg="grey", width=25, height=2)
+    torque_button.pack(pady=10)
 
     # Start the UDP reading thread
     udp_thread = threading.Thread(target=read_data_UDP)
@@ -249,7 +281,7 @@ def main():
     udp_thread.start()
 
     # Start the robot movement thread
-    robot_thread = threading.Thread(target=move_robot, args=(robot, gripper, needle, text_label))
+    robot_thread = threading.Thread(target=move_robot, args=(robot, gripper, needle, text_label, torque_button))
     robot_thread.daemon = True
     robot_thread.start()
 
