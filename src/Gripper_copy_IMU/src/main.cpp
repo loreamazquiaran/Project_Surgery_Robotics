@@ -21,6 +21,11 @@ const int PIN_S2 = 27;
 int s1Status = HIGH;
 int s2Status = HIGH;
 
+float Torque_roll1 = 0.0;
+float Torque_roll2 = 0.0;
+float Torque_pitch = 0.0;
+float Torque_yaw = 0.0;
+
 // Torque threshold for vibration
 const float TORQUE_THRESHOLD = 5.0;
 
@@ -80,7 +85,7 @@ void receiveTorquesUDP() {
         return;
       }
       const char* device = doc["device"];
-      if (strcmp(device, "G4_Gri") == 0) {
+      if (strcmp(device, "G4_Servos") == 0) {
         Torque_roll1 = doc["Torque_roll1"].as<float>();
         Torque_roll2 = doc["Torque_roll2"].as<float>();
         Torque_pitch = doc["Torque_pitch"].as<float>();
@@ -90,9 +95,6 @@ void receiveTorquesUDP() {
         Serial.print(" Torque_pitch: "); Serial.print(Torque_pitch);
         Serial.print(" Torque_yaw: "); Serial.println(Torque_yaw);
 
-        float totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw;
-        Serial.print("Total torque: "); Serial.println(totalTorque);
-
         // Vibration motor control based on torque values
         float totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw;
         // Convert torque to PWM value (0-255)
@@ -100,7 +102,7 @@ void receiveTorquesUDP() {
         ledcWrite(0, vibrationValue); // Set the PWM value for the vibration motor
         Serial.print("Vibration motor value: ");
         Serial.println(vibrationValue);
-        
+
       }
     }
   }
