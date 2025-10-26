@@ -12,7 +12,7 @@ const char *ssid = "Robotics_UB";
 const char *password = "rUBot_xx";
 
 // UDP settings
-IPAddress receiverESP32IP(192, 168, 1, 41);
+IPAddress receiverESP32IP(192, 168, 1, 41); // Gripper
 IPAddress receiverComputerIP(192, 168, 1, 45);
 const int udpPort = 12345;
 WiFiUDP udp;
@@ -171,17 +171,25 @@ void setup() {
 
 void sendTorquesUDP() {
   JsonDocument doc;
-  doc["device"] = "G4_Servos";
+  doc["device"] = deviceId;
   doc["Torque_roll1"] = Torque_roll1;
+  doc["Torque_roll2"] = Torque_roll2;
   doc["Torque_pitch"] = Torque_pitch;
   doc["Torque_yaw"] = Torque_yaw;
 
-  char jsonBuffer[256];
-  serializeJson(doc, jsonBuffer);
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
 
+  // Send to ESP32 Gripper
   udp.beginPacket(receiverESP32IP, udpPort);
   udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
   udp.endPacket();
+
+  // Send to Computer
+  udp.beginPacket(receiverComputerIP, udpPort);
+  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
+  udp.endPacket();
+
 }
 
 void loop() {

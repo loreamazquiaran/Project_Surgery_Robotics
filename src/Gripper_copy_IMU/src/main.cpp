@@ -95,7 +95,7 @@ void receiveTorquesUDP() {
 }
 
 void sendOrientationUDP() {
-  JsonDocument doc;
+  StaticJsonDocument<256> doc;
   doc["device"] = deviceId;
   doc["roll"] = Gri_roll;
   doc["pitch"] = Gri_pitch;
