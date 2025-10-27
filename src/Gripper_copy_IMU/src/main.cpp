@@ -67,6 +67,29 @@ void updateOrientation() {
   s2Status = digitalRead(PIN_S2);
 }
 
+void sendOrientationUDP() {
+  StaticJsonDocument<256> doc;
+  doc["device"] = deviceId;
+  doc["roll"] = Gri_roll;
+  doc["pitch"] = Gri_pitch;
+  doc["yaw"] = Gri_yaw;
+  doc["s1"] = s1Status;
+  doc["s2"] = s2Status;
+
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
+
+  // Send to ESP32 Servos
+  udp.beginPacket(receiverESP32IP, udpPort);
+  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
+  udp.endPacket();
+
+  // Send to Computer
+  udp.beginPacket(receiverComputerIP, udpPort);
+  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
+  udp.endPacket();
+}
+
 void receiveTorquesUDP() {
   int packetSize = udp.parsePacket();
   if (packetSize) {
@@ -106,29 +129,6 @@ void receiveTorquesUDP() {
       }
     }
   }
-}
-
-void sendOrientationUDP() {
-  StaticJsonDocument<256> doc;
-  doc["device"] = deviceId;
-  doc["roll"] = Gri_roll;
-  doc["pitch"] = Gri_pitch;
-  doc["yaw"] = Gri_yaw;
-  doc["s1"] = s1Status;
-  doc["s2"] = s2Status;
-
-  char jsonBuffer[512];
-  serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
-
-  // Send to ESP32 Servos
-  udp.beginPacket(receiverESP32IP, udpPort);
-  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
-  udp.endPacket();
-
-  // Send to Computer
-  udp.beginPacket(receiverComputerIP, udpPort);
-  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
-  udp.endPacket();
 }
 
 void setup() {

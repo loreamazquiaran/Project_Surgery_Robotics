@@ -43,6 +43,11 @@ float sumRoll1 = 0, sumRoll2 = 0, sumPitch = 0, sumYaw = 0;
 float OldValueRoll = 0, OldValuePitch = 0, OldValueYaw = 0;
 float roll = 0, pitch = 0, yaw = 0;
 int s1 = 1, s2 = 1;
+// Reference flags & values for initial servo mapping (used by moveServos)
+bool servosRefInitialized = false;
+float refGri_roll = 0.0;
+float refGri_pitch = 0.0;
+float refGri_yaw = 0.0;
 
 void connectToWiFi() {
   Serial.print("Connecting to Wi-Fi");
@@ -115,23 +120,78 @@ float getTorque(float& sum, int analogPin, float& previous) {
 }
 
 void moveServos() {
-  roll = Gri_roll;
-  OldValueRoll = roll;
-  pitch = Gri_pitch;
-  OldValuePitch = pitch;
-  yaw = Gri_yaw;
-  OldValueYaw = yaw;
+  // Assignem les darreres orientacions rebudes
+  float currentRoll = Gri_roll;
+  float currentPitch = Gri_pitch;
+  float currentYaw = Gri_yaw;
 
-  float delta = 0;
+  // Inicialitzem la referència la primera vegada que tenim dades reals
+  if (!servosRefInitialized) {
+    // Prenem la primera mesura com a referència (zero relatiu)
+    refGri_roll = currentRoll;
+    refGri_pitch = currentPitch;
+    refGri_yaw = currentYaw;
+    servosRefInitialized = true;
+    Serial.println("Servo references initialized:");
+    Serial.print(" refRoll="); Serial.print(refGri_roll);
+    Serial.print(" refPitch="); Serial.print(refGri_pitch);
+    Serial.print(" refYaw="); Serial.println(refGri_yaw);
+  }
+
+  // Helper per trobar la diferència angular mínima entre a i b (en graus)
+  auto angleDiff = [](float a, float b) -> float {
+    float d = fmod((a - b + 540.0f), 360.0f) - 180.0f; // retorna en rang [-180,180)
+    return d;
+  };
+
+  // Calculem variacions relatives respecte la referència
+  float relRoll  = angleDiff(currentRoll,  refGri_roll);   // +/- graus
+  float relPitch = angleDiff(currentPitch, refGri_pitch);  // +/- graus
+  float relYaw   = angleDiff(currentYaw,   refGri_yaw);    // +/- graus
+
+  // Delta addicional quan S1 premut (obrir)
+  float delta = 0.0f;
   if (s1 == 0) {
-    delta = 40;
+    delta = 40.0f;
     Serial.println("S1 premut → Obrint");
   }
 
-  servo_roll1.write(Gri_roll + delta);
-  servo_roll2.write(180 - Gri_roll);
-  servo_pitch.write(pitch);
-  servo_yaw.write(yaw);
+  // MAPPEIG A SERVOS:
+  // -> Partim de la posició inicial 90° i apliquem la variació rel
+  // Roll: 
+  //   servo_roll1 = 90 + relRoll + delta   
+  //   servo_roll2 = 90 - relRoll - delta
+  float servoRoll1Pos = 90.0f + relRoll + delta;
+  float servoRoll2Pos = 90.0f - relRoll - delta;
+  // Pitch: moviment senzill respecte 90°
+  float servoPitchPos = 90.0f + relPitch;
+  // Yaw: variació relativa respecte la referència (independent del nord)
+  // Aplicada des de 90°: servo_yaw = 90 + relYaw
+  float servoYawPos = 90.0f + relYaw;
+
+  // Clamp a [0, 180]
+  auto clamp = [](float v)->int {
+    if (v < 0.0f) return 0;
+    if (v > 180.0f) return 180;
+    return (int)round(v);
+  };
+
+  int posRoll1  = clamp(servoRoll1Pos);
+  int posRoll2  = clamp(servoRoll2Pos);
+  int posPitch  = clamp(servoPitchPos);
+  int posYaw    = clamp(servoYawPos);
+
+  // Escriu als servos
+  servo_roll1.write(posRoll1);
+  servo_roll2.write(posRoll2);
+  servo_pitch.write(posPitch);
+  servo_yaw.write(posYaw);
+
+  // Guarda valors "antics" si encara els uses en altres càlculs
+  OldValueRoll = currentRoll;
+  OldValuePitch = currentPitch;
+  OldValueYaw = currentYaw;
+
 }
 
 void setup() {
@@ -170,24 +230,32 @@ void setup() {
 }
 
 void sendTorquesUDP() {
-  JsonDocument doc;
+  // Calcular els torques utilitzant la funció getTorque ja definida
+  Torque_roll1  = getTorque(sumRoll1, PIN_ANALOG_ROLL1, prevRoll1);
+  Torque_roll2  = getTorque(sumRoll2, PIN_ANALOG_ROLL2, prevRoll2);
+  Torque_pitch  = getTorque(sumPitch, PIN_ANALOG_PITCH, prevPitch);
+  Torque_yaw    = getTorque(sumYaw, PIN_ANALOG_YAW, prevYaw);
+
+  // Crear el JSON amb capacitat estàtica
+  StaticJsonDocument<256> doc;
   doc["device"] = deviceId;
   doc["Torque_roll1"] = Torque_roll1;
   doc["Torque_roll2"] = Torque_roll2;
   doc["Torque_pitch"] = Torque_pitch;
   doc["Torque_yaw"] = Torque_yaw;
 
-  char jsonBuffer[512];
-  serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
+  // Serialitzar i obtenir la llargada real
+  char jsonBuffer[256];
+  size_t len = serializeJson(doc, jsonBuffer, sizeof(jsonBuffer));
 
   // Send to ESP32 Gripper
   udp.beginPacket(receiverESP32IP, udpPort);
-  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
+  udp.write((const uint8_t*)jsonBuffer, len);
   udp.endPacket();
 
   // Send to Computer
   udp.beginPacket(receiverComputerIP, udpPort);
-  udp.write((const uint8_t*)jsonBuffer, strlen(jsonBuffer));
+  udp.write((const uint8_t*)jsonBuffer, len);
   udp.endPacket();
 
 }
