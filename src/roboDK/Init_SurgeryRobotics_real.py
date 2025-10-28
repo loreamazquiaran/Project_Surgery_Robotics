@@ -226,7 +226,7 @@ def move_robot(robot, gripper, needle, text_label):
         time.sleep(READ_INTERVAL_S)# define the reading interval
 
 def on_closing():
-    global root, sock
+    global root, sock, robot_socket
     print("Closing...")
     try:
         sock.close()
@@ -235,6 +235,12 @@ def on_closing():
         #print("Program INITIALIZED")
     except Exception as e:
         #print(f"Error al tancar el socket: {e}")
+        pass
+    try:
+        if robot_socket:
+            robot_socket.close()
+            print("Closed UR socket")
+    except Exception:
         pass
     root.destroy()
 # Update functions for sliders
@@ -245,6 +251,7 @@ def set_zero_yaw_tool(value):
 def set_zero_yaw_gripper(value):
     global ZERO_YAW_GRIPPER
     ZERO_YAW_GRIPPER = float(value)
+
 # Main function
 def main():
     global root, ZERO_YAW_TOOL, ZERO_YAW_GRIPPER, robot, gripper, base, text_label, robot_is_connected, absolute_path
