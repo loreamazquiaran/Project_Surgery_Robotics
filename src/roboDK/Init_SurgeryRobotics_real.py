@@ -38,6 +38,8 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
 #print(f"Listening on {UDP_IP}:{UDP_PORT}")
 
+robot_socket = None
+
 
 # Initialize RoboDK
 def initialize_robodk(absolute_path):
@@ -86,7 +88,20 @@ def update_text_label(label, tool_orientation, gripper_orientation, status_messa
     label.after(0, lambda: label.config(text=full_text))
 
 def send_ur_script(command):
-    robot_socket.send(("{}\n".format(command)).encode())
+    global robot_socket
+    if robot_socket is None:
+        print("Robot socket not available; cannot send URScript.")
+        return
+    try:
+        robot_socket.send(("{}\n".format(command)).encode())
+    except Exception as e:
+        print(f"Error sending to robot: {e}")
+        # try to close socket and mark as disconnected
+        try:
+            robot_socket.close()
+        except:
+            pass
+        robot_socket = None
     
 def receive_response(t):
     try:
@@ -95,6 +110,7 @@ def receive_response(t):
     except socket.error as e:
         print(f"Error receiving data from the robot: {e}")
         exit(1) #Non-zero exit status code to indicate the error
+
 # Function to read UDP data and update the global variable
 def read_data_UDP():
     global Endowrist_rpy, Gripper_rpy, data_lock
@@ -149,10 +165,16 @@ def move_robot(robot, gripper, needle, text_label):
                 robot.MoveL(endowrist_pose_new, True)
                 endowrist_orientation_msg = f"R={round(endo_roll)} P={round(endo_pitch)} W={round((endo_yaw+ZERO_YAW_TOOL)%360)}"
                 status_message = ""
-                if robot_is_connected:
+                
+                if robot_is_connected and robot_socket is not None:
                     # Send the endowrist pose to the robot
-                    Xr, Yr, Zr, rr, pr, yr = Pose_2_TxyzRxyz(endowrist_pose_new)
-                    endowrist_pose_msg = f"movel(p[{Xr}, {Yr}, {Zr}, {rr}, {pr}, {yr}], a={accel_mss}, v={speed_ms}, t={timel}, r=0.0000)"
+                    Xr, Yr, Zr, rr_deg, pr_deg, yr_deg = Pose_2_TxyzRxyz(endowrist_pose_new)
+                    # Convert orientation angles from degrees to radians
+                    rr_rad = math.radians(rr_deg)
+                    pr_rad = math.radians(pr_deg)
+                    yr_rad = math.radians(yr_deg)
+                    # Build URScript movel command (using radians for the rotation vector components)
+                    endowrist_pose_msg = f"movel(p[{Xr:.3f}, {Yr:.3f}, {Zr:.3f}, {rr_rad:.6f}, {pr_rad:.6f}, {yr_rad:.6f}], a={accel_mss}, v={speed_ms}, t={timel}, r=0.0000)"
                     send_ur_script(endowrist_pose_msg)
                     receive_response(timel)
                    
