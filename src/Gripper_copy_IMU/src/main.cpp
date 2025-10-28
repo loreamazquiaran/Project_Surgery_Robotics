@@ -119,10 +119,19 @@ void receiveTorquesUDP() {
         Serial.print(" Torque_yaw: "); Serial.println(Torque_yaw);
 
         // Vibration motor control based on torque values
-        float totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw;
+        float totalTorque = Torque_roll1 + Torque_pitch + Torque_yaw; // falta Torque_roll2 ??
         // Convert torque to PWM value (0-255)
         int vibrationValue = constrain(totalTorque * 2.5, 0, 255); // Adjust the scaling factor as needed
         ledcWrite(0, vibrationValue); // Set the PWM value for the vibration motor
+
+        // EXTRA: utilitzar threshold per evitar vibracions contínues amb soroll baix
+        //if (totalTorque >= TORQUE_THRESHOLD) {
+          //int vibrationValue = constrain((int)(totalTorque * 2.5), 0, 255);
+          //ledcWrite(0, vibrationValue);
+        //} else {
+          //ledcWrite(0, 0);
+        //}
+
         Serial.print("Vibration motor value: ");
         Serial.println(vibrationValue);
 
