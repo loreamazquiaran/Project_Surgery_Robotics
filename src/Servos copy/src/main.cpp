@@ -49,6 +49,10 @@ float refGri_roll = 0.0;
 float refGri_pitch = 0.0;
 float refGri_yaw = 0.0;
 
+float delta_yaw = 0;
+float delta_yaw_old = 0;
+bool firstYawIteration = true;
+
 void connectToWiFi() {
   Serial.print("Connecting to Wi-Fi");
   WiFi.begin(ssid, password);
@@ -120,79 +124,61 @@ float getTorque(float& sum, int analogPin, float& previous) {
 }
 
 void moveServos() {
-  // Assignem les darreres orientacions rebudes
-  float currentRoll = Gri_roll;
-  float currentPitch = Gri_pitch;
-  float currentYaw = Gri_yaw;
-
-  // Inicialitzem la referència la primera vegada que tenim dades reals
-  if (!servosRefInitialized) {
-    // Prenem la primera mesura com a referència (zero relatiu)
-    refGri_roll = currentRoll;
-    refGri_pitch = currentPitch;
-    refGri_yaw = currentYaw;
-    servosRefInitialized = true;
-    Serial.println("Servo references initialized:");
-    Serial.print(" refRoll="); Serial.print(refGri_roll);
-    Serial.print(" refPitch="); Serial.print(refGri_pitch);
-    Serial.print(" refYaw="); Serial.println(refGri_yaw);
-  }
-
-  // Helper per trobar la diferència angular mínima entre a i b (en graus)
-  auto angleDiff = [](float a, float b) -> float {
-    float d = fmod((a - b + 540.0f), 360.0f) - 180.0f; // retorna en rang [-180,180)
-    return d;
-  };
-
-  // Calculem variacions relatives respecte la referència
-  float relRoll  = angleDiff(currentRoll,  refGri_roll);   // +/- graus
-  float relPitch = angleDiff(currentPitch, refGri_pitch);  // +/- graus
-  float relYaw   = angleDiff(currentYaw,   refGri_yaw);    // +/- graus
-
-  // Delta addicional quan S1 premut (obrir)
-  float delta = 0.0f;
+  float delta = 0;
   if (s1 == 0) {
-    delta = 40.0f;
+    delta = 40;
     Serial.println("S1 premut → Obrint");
   }
+  
+  //ROLL
+  if (Gri_roll >= 0 && Gri_roll <= 90) {
+    // Mapea de 0-90 a 90-180
+    float mappedValue = 90 + Gri_roll;
+    servo_roll1.write(90 + Gri_roll + delta);
+    servo_roll2.write(90 - Gri_roll);
+  }
+  else if (Gri_roll >= 270 && Gri_roll < 360)   {
+    // Mapea de 270-360 a 0-90
+    float mappedValue = 90 - (360 - Gri_roll);
+    servo_roll1.write(90 - (360 - Gri_roll) + delta);
+    servo_roll2.write(180 - mappedValue);
+  }
 
-  // MAPPEIG A SERVOS:
-  // -> Partim de la posició inicial 90° i apliquem la variació rel
-  // Roll: 
-  //   servo_roll1 = 90 + relRoll + delta   
-  //   servo_roll2 = 90 - relRoll - delta
-  float servoRoll1Pos = 90.0f + relRoll + delta;
-  float servoRoll2Pos = 90.0f - relRoll - delta;
-  // Pitch: moviment senzill respecte 90°
-  float servoPitchPos = 90.0f + relPitch;
-  // Yaw: variació relativa respecte la referència (independent del nord)
-  // Aplicada des de 90°: servo_yaw = 90 + relYaw
-  float servoYawPos = 90.0f + relYaw;
+  //PITCH
+  if  (Gri_pitch >= 0 && Gri_pitch <= 90) {
+    servo_pitch.write(90 + Gri_pitch);
+  } 
+  else if (Gri_pitch >= 270 && Gri_pitch < 360) {
+    servo_pitch.write(Gri_pitch-270);
+  }
 
-  // Clamp a [0, 180]
-  auto clamp = [](float v)->int {
-    if (v < 0.0f) return 0;
-    if (v > 180.0f) return 180;
-    return (int)round(v);
-  };
+  //YAW
+  if (firstYawIteration) {
+  // Solo se ejecuta la primera vez
+  OldValueYaw = Gri_yaw;        // guardar referencia inicial
+  delta_yaw = 0;                // no hay movimiento aún
+  delta_yaw_old = 0;
+  firstYawIteration = false;    // después ya no entra aquí
+} 
+else {
+  // En las siguientes iteraciones
+  delta_yaw = Gri_yaw - OldValueYaw;
 
-  int posRoll1  = clamp(servoRoll1Pos);
-  int posRoll2  = clamp(servoRoll2Pos);
-  int posPitch  = clamp(servoPitchPos);
-  int posYaw    = clamp(servoYawPos);
+  // corregir salto circular
+  if (delta_yaw > 180) delta_yaw -= 360;
+  else if (delta_yaw < -180) delta_yaw += 360;
 
-  // Escriu als servos
-  servo_roll1.write(posRoll1);
-  servo_roll2.write(posRoll2);
-  servo_pitch.write(posPitch);
-  servo_yaw.write(posYaw);
+  delta_yaw = delta_yaw + delta_yaw_old;
+  delta_yaw_old = delta_yaw;
+  OldValueYaw = Gri_yaw;
+}
 
-  // Guarda valors "antics" si encara els uses en altres càlculs
-  OldValueRoll = currentRoll;
-  OldValuePitch = currentPitch;
-  OldValueYaw = currentYaw;
+// mover el servo
+servo_yaw.write(90 + delta_yaw);
+
 
 }
+
 
 void setup() {
   Serial.begin(115200);
