@@ -25,6 +25,10 @@ Gripper_rpy = None
 Servo_torques = None
 data_lock = threading.Lock()# semaphor to manage data from 2 threads
 
+# ------- New: Thresholds for torque color coding -------
+TORQUE_WARN = 5.0
+TORQUE_DANGER = 15.0
+
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
 #print(f"Listening on {UDP_IP}:{UDP_PORT}")
@@ -66,7 +70,7 @@ def update_text_label(label, tool_orientation, gripper_orientation, status_messa
 
 # Function to read UDP data and update the global variable
 def read_data_UDP():
-    global Endowrist_rpy, Gripper_rpy, data_lock
+    global Endowrist_rpy, Gripper_rpy, Servo_torques, data_lock
     while True:
         try:
             data, addr = sock.recvfrom(BUFFER_SIZE) 
@@ -79,6 +83,9 @@ def read_data_UDP():
                 elif device_id == "G4_Gri":
                     with data_lock:
                         Gripper_rpy = received_data
+                elif device_id == "G4_Servos":
+                    with data_lock:
+                        Servo_torques = received_data
             except json.JSONDecodeError:
                 print("Error decoding JSON data")
         except socket.error as e:
@@ -89,7 +96,7 @@ def read_data_UDP():
 
 # Function to process the latest UDP data and move the robot
 def move_robot(robot, gripper, needle, text_label):
-    global ZERO_YAW_TOOL, ZERO_YAW_GRIPPER, Endowrist_rpy, Gripper_rpy, data_lock
+    global ZERO_YAW_TOOL, ZERO_YAW_GRIPPER, Endowrist_rpy, Gripper_rpy, Servo_torques, data_lock
     global e_roll, e_pitch, e_yaw, g_roll, g_pitch, g_yaw, s1, s2, s3, s4
     
     endowrist_orientation_msg = ""
@@ -101,6 +108,7 @@ def move_robot(robot, gripper, needle, text_label):
         with data_lock:
             current_Endowrist_rpy = Endowrist_rpy
             current_Gripper_rpy = Gripper_rpy
+            current_Servo_torques = Servo_torques
 
         if current_Endowrist_rpy:
             e_roll = Endowrist_rpy.get("roll")
@@ -158,6 +166,36 @@ def move_robot(robot, gripper, needle, text_label):
                 needle.setParent(gripper)
                 needle.setPose(TxyzRxyz_2_Pose([0, 0, 0, 0, 0, 0]))
                 status_message = "🔵 S1 no premut: agulla agafada"
+        
+        torque_color = "lightgrey"
+        if current_Servo_torques:
+            try:
+                t_r1 = float(current_Servo_torques.get("Torque_roll1", 0.0))
+                t_r2 = float(current_Servo_torques.get("Torque_roll2", 0.0))
+                t_p  = float(current_Servo_torques.get("Torque_pitch", 0.0))
+                t_y  = float(current_Servo_torques.get("Torque_yaw", 0.0))
+            except Exception as ex:
+                t_r1 = t_r2 = t_p = t_y = 0.0
+            
+            # Format numeric display
+            servo_torques_msg = f"R1={t_r1:.2f} R2={t_r2:.2f} P={t_p:.2f} Y={t_y:.2f}"
+            
+            # Decide color based on total torque
+            total_torque = t_r1 + t_r2 + t_p + t_y
+            # Color coding: green (low), yellow (warn), red (danger)
+            if total_torque < TORQUE_WARN:
+                torque_color = "#7CFC00"  # light green
+            elif total_torque < TORQUE_DANGER:
+                torque_color = "#FFD700"  # gold (yellow)
+            else:
+                torque_color = "#FF4500"  # orange-red
+            
+            # Update the torque button colour
+            try:
+                torque_button.after(0, lambda c=torque_color: torque_button.config(bg=c))
+            except Exception:
+                pass
+            
                      
         # Update the label with the latest values
         update_text_label(text_label, endowrist_orientation_msg, gripper_orientation_msg, status_message, servo_torques_msg)
@@ -189,6 +227,7 @@ def set_zero_yaw_gripper(value):
 # Main function
 def main():
     global root, ZERO_YAW_TOOL, ZERO_YAW_GRIPPER, robot, gripper, base, text_label, absolute_path
+    global torque_button
     
     RDK, robot, base, gripper, needle = initialize_robodk(absolute_path)
 
@@ -197,6 +236,10 @@ def main():
     root.protocol("WM_DELETE_WINDOW", on_closing) # Proper clossing
     text_label = tk.Label(root, text="", wraplength=300)
     text_label.pack(padx=20, pady=20)
+    
+    # --------- New: Torque color button -------------
+    torque_button = tk.Button(root, text="Torque level", bg="lightgrey", width=20)
+    torque_button.pack(padx=20, pady=(0,10))
 
     # Add sliders for ZERO_YAW_TOOL and ZERO_YAW_GRIPPER
     tool_yaw_slider = tk.Scale(root, from_=-180, to=180, orient=tk.HORIZONTAL, label="Tool Yaw",
