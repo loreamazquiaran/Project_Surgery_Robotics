@@ -26,8 +26,8 @@ Servo_torques = None
 data_lock = threading.Lock()# semaphor to manage data from 2 threads
 
 # ------- New: Thresholds for torque color coding -------
-TORQUE_WARN = 20.0
-TORQUE_DANGER = 60.0
+TORQUE_WARN = 5.0
+TORQUE_DANGER = 15.0
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
