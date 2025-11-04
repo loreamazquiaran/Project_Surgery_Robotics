@@ -26,8 +26,8 @@ Servo_torques = None
 data_lock = threading.Lock()# semaphor to manage data from 2 threads
 
 # ------- New: Thresholds for torque color coding -------
-TORQUE_WARN = 5.0
-TORQUE_DANGER = 15.0
+TORQUE_WARN = 20.0
+TORQUE_DANGER = 60.0
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
@@ -183,7 +183,7 @@ def move_robot(robot, gripper, needle, text_label):
             servo_torques_msg = f"R1={t_r1:.2f} R2={t_r2:.2f} P={t_p:.2f} Y={t_y:.2f}"
             
             # Decide color based on total torque
-            total_torque = t_r1 + t_r2 + t_p + t_y
+            total_torque = t_r1 + t_r2 
             
             # Color coding: green (low), yellow (warn), red (danger)
             if total_torque < TORQUE_WARN:
